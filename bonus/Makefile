@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -Wall -Wextra -std=c++11
 TARGET = daemon
-SOURCES = main.cpp Tintin_reporter.cpp
+SOURCES = main.cpp Tintin_reporter.cpp web_interface.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 all: $(TARGET)
