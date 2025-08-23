@@ -9,6 +9,7 @@
 #include <sys/select.h>
 #include <algorithm>
 #include <signal.h>
+#include <errno.h>
 #include "Tintin_reporter.hpp"
 
 const int MAX_CONNECTIONS = 3;
@@ -19,12 +20,12 @@ Tintin_reporter* global_logger = nullptr;
 
 bool check_lock_file() {
     std::ifstream file(LOCK_FILE);
-    std::cout <<" I am checking if " << LOCK_FILE << "is exits" << std::endl;
     if (file.is_open()) {
-        std::cout << "Lock file exists: " << LOCK_FILE << std::endl;
         int pid;
         file >> pid;
         file.close();
+        
+
         if (kill(pid, 0) == 0) {
             std::cerr << "Can't open: " << LOCK_FILE << std::endl;
             return false;
@@ -33,25 +34,21 @@ bool check_lock_file() {
             return true;
         }
     }
-    std::cout << "Lock file does not exist: " << LOCK_FILE << std::endl;
     return true;
 }
 
- 
 void create_lock_file() {
     std::ofstream file(LOCK_FILE);
-    std::cout <<" I am creating " << LOCK_FILE << std::endl;
     if (file.is_open()) {
-        std::cout << "Creating lock file: " << LOCK_FILE << " with PID: " << getpid() << "is created" << std::endl;
         file << getpid() << std::endl;
         file.close();
     } else {
-        std::cerr << "Can't open: " << LOCK_FILE << std::endl;
+        std::cerr << "Can't create lock file: " << LOCK_FILE << std::endl;
+        exit(1);
     }
 }
 
 void remove_lock_file() {
-    std::cout << "Removing lock file: " << LOCK_FILE << std::endl;
     unlink(LOCK_FILE.c_str());
 }
 
@@ -62,30 +59,14 @@ void signal_handler(int signal) {
     }
     daemon_running = false;
     
-    
+    // Remove lock file when signal is received
     remove_lock_file();
     
     (void)signal;
-    exit(0);  // Force exit to ensure cleanup
 }
-
 int main() {
-    std::cout << "Step 1: Checking if we can start..." << std::endl;
+    // Check if another daemon is already running
     if (!check_lock_file()) {
-        std::cout << "Cannot start - another instance is running" << std::endl;
-        return 1;
-    }
-    
-    std::cout << "Step 2: Creating lock file..." << std::endl;
-    create_lock_file();
-    
-    std::cout << "Step 3: Verifying lock file was created..." << std::endl;
-    std::ifstream verify_file(LOCK_FILE);
-    if (verify_file.is_open()) {
-        std::cout << "Lock file successfully created!" << std::endl;
-        verify_file.close();
-    } else {
-        std::cout << "ERROR: Lock file was not created!" << std::endl;
         return 1;
     }
     
@@ -96,41 +77,41 @@ int main() {
     
     if (pid < 0) {
         global_logger->error("Matt_daemon: Fork failed");
-        remove_lock_file();
         delete global_logger;
         return 1;
     }
     
     if (pid > 0) {
+        // Parent process - just exit without removing lock file
         std::cout << "Socket daemon started with PID: " << pid << std::endl;
         delete global_logger;
         exit(0);
     }
     
-    atexit(remove_lock_file);
+    // Child process becomes daemon - now create lock file with daemon PID
     
+    // Setup exit handler for daemon process only
+    atexit(remove_lock_file);
+    create_lock_file();
+    
+    // Child process becomes daemon
     setsid();
     close(0); 
     close(1);
     close(2); 
     
-    std::ofstream update_lock(LOCK_FILE);
-    if (update_lock.is_open()) {
-        update_lock << getpid() << std::endl;
-        update_lock.close();
-    }
-    
+    // Recreate logger for daemon process
     delete global_logger;
     global_logger = new Tintin_reporter(LOG_FILE);
     global_logger->info("Matt_daemon: Creating server.");
     
-    
+    // Setup signal handlers
     signal(SIGTERM, signal_handler);
     signal(SIGINT, signal_handler);  
     signal(SIGQUIT, signal_handler);
     signal(SIGHUP, signal_handler);
     
-    
+    // Create socket
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
         global_logger->error("Matt_daemon: Socket creation failed");
@@ -147,7 +128,7 @@ int main() {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(8080); 
     
-    
+    // Bind socket
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         global_logger->error("Matt_daemon: Bind failed");
         close(server_fd);
@@ -168,7 +149,6 @@ int main() {
     global_logger->info("Matt_daemon: Entering Daemon mode.");
     global_logger->info("Matt_daemon: started. PID: " + std::to_string(getpid()) + ".");
     
-    
     int client_fds[MAX_CONNECTIONS];
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
         client_fds[i] = -1; // -1 means empty slot
@@ -179,18 +159,22 @@ int main() {
     FD_SET(server_fd, &master_fds);
     int max_fd = server_fd;
     
-    
+    // Main daemon loop
     while (daemon_running) {
         read_fds = master_fds;
         
         if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) < 0) {
+            if (errno == EINTR) {
+                // Interrupted by signal, continue
+                continue;
+            }
             if (daemon_running) {
                 global_logger->error("Matt_daemon: Select failed");
             }
             continue;
         }
         
-        
+        // Check for new connections
         if (FD_ISSET(server_fd, &read_fds)) {
             struct sockaddr_in client_address;
             socklen_t client_len = sizeof(client_address);
@@ -199,7 +183,6 @@ int main() {
             if (new_client < 0) {
                 global_logger->error("Matt_daemon: Accept failed");
             } else {
-               
                 int slot = -1;
                 for (int i = 0; i < MAX_CONNECTIONS; i++) {
                     if (client_fds[i] == -1) {
@@ -209,20 +192,20 @@ int main() {
                 }
                 
                 if (slot != -1) {
-                    
+                    // Accept the connection
                     client_fds[slot] = new_client;
                     FD_SET(new_client, &master_fds);
                     max_fd = std::max(max_fd, new_client);
                     global_logger->info("Matt_daemon: Client connected, slot " + std::to_string(slot));
                 } else {
-                    
+                    // No available slots, reject connection
                     global_logger->warning("Matt_daemon: Maximum connections reached, rejecting client");
                     close(new_client);
                 }
             }
         }
         
-        
+        // Check existing client connections for data
         for (int i = 0; i < MAX_CONNECTIONS; i++) {
             if (client_fds[i] != -1 && FD_ISSET(client_fds[i], &read_fds)) {
                 char buffer[1024];
@@ -230,26 +213,26 @@ int main() {
                 int bytes_read = recv(client_fds[i], buffer, sizeof(buffer) - 1, 0);
                 
                 if (bytes_read <= 0) {
-                    
+                    // Client disconnected
                     global_logger->info("Matt_daemon: Client disconnected from slot " + std::to_string(i));
                     FD_CLR(client_fds[i], &master_fds);
                     close(client_fds[i]);
                     client_fds[i] = -1;
                 } else {
-                    
+                    // Process received data
                     std::string message(buffer, bytes_read);
                     
-                    
+                    // Remove trailing newline if present
                     if (!message.empty() && message.back() == '\n') {
                         message.pop_back();
                     }
                     
-                    
+                    // Handle the message
                     if (message == "quit") {
                         global_logger->info("Matt_daemon: Request quit.");
                         global_logger->info("Matt_daemon: Quitting.");
                         
-                        
+                        // Notify all connected clients before shutting down
                         for (int j = 0; j < MAX_CONNECTIONS; j++) {
                             if (client_fds[j] != -1) {
                                 send(client_fds[j], "Daemon shutting down\n", 21, 0);
@@ -258,9 +241,9 @@ int main() {
                         }
                         
                         daemon_running = false;
-                        break;
+                        break; // Exit the client loop
                     } else {
-                        
+                        // Log user input using LOG level
                         global_logger->log("Matt_daemon: User input: " + message);
                     }
                 }
@@ -268,10 +251,10 @@ int main() {
         }
     }
     
-    
+    // Cleanup when shutting down
     global_logger->info("Matt_daemon: Quitting.");
     
-    
+    // Close all client connections
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
         if (client_fds[i] != -1) {
             close(client_fds[i]);
@@ -280,10 +263,10 @@ int main() {
     
     close(server_fd);
     
-    
+    // Remove lock file
     remove_lock_file();
     
-    
+    // Cleanup logger
     delete global_logger;
     return 0;
 }
