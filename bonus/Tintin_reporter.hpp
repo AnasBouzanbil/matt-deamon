@@ -5,16 +5,19 @@
 #include <fstream>
 #include <iostream>
 #include <ctime>
+#include <map>
+#include "Auth.hpp"
 
 class Tintin_reporter {
 private:
     std::string log_file_path;
     bool log_to_console;
+    
 
 public:
     // Constructor
     Tintin_reporter(const std::string& file_path = "/tmp/matt_daemon.log", bool console = false);
-    
+    std::map<int, bool> clientAuthStatus;
     // Destructor
     ~Tintin_reporter();
     
