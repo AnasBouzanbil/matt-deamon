@@ -13,6 +13,62 @@
 #include "Tintin_reporter.hpp"
 #include "RemoteShell.hpp"
 #include "Auth.hpp"
+// For parsing HTTP GET query
+#include <sstream>
+#include <map>
+#include "Pages.hpp"
+
+// Extracts username and password from HTTP GET request string
+// Reads the last n lines from a file and returns them as a string
+std::string get_last_n_lines(const std::string& filename, int n) {
+    std::ifstream file(filename);
+    if (!file.is_open()) return "Could not open log file.";
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(file, line)) {
+        lines.push_back(line);
+    }
+    std::string result;
+    int start = std::max(0, (int)lines.size() - n);
+    for (int i = start; i < (int)lines.size(); ++i) {
+        result += lines[i] + "\n";
+    }
+    return result;
+}
+bool extract_credentials(const std::string& message, std::string& username, std::string& password) {
+    // Look for /login?username=...&password=...
+    std::size_t login_pos = message.find("/login?");
+    if (login_pos == std::string::npos)
+        return false;
+    std::size_t start = login_pos + 7; // after '/login'
+    std::size_t end = message.find(" ", start);
+    if (end == std::string::npos)
+        end = message.length();
+    std::string query = message.substr(start, end - start);
+    if (query.empty())
+        return false;
+    // Remove leading '?'
+    if (query[0] == '?')
+        query = query.substr(1);
+    std::map<std::string, std::string> params;
+    std::istringstream iss(query);
+    std::string token;
+    while (std::getline(iss, token, '&')) {
+        std::size_t eq = token.find('=');
+        if (eq != std::string::npos) {
+            std::string key = token.substr(0, eq);
+            std::string value = token.substr(eq + 1);
+            params[key] = value;
+        }
+    }
+    if (params.count("username") && params.count("password")) {
+        username = params["username"];
+        password = params["password"];
+        if (username == "1337admin" && password == "password123")
+            return true;
+    }
+    return false;
+}
 
 const int MAX_CONNECTIONS = 3;
 const std::string LOCK_FILE = "/tmp/matt_daemon.lock";
@@ -29,7 +85,7 @@ bool check_lock_file() {
         
 
         if (kill(pid, 0) == 0) {
-            std::cerr << "Can't open: " << LOCK_FILE << std::endl;
+            std::cerr << "Another instance is already running " << std::endl;
             return false;
         } else {
             unlink(LOCK_FILE.c_str());
@@ -182,14 +238,7 @@ int main() {
             struct sockaddr_in client_address;
             socklen_t client_len = sizeof(client_address);
             int new_client = accept(server_fd, (struct sockaddr *)&client_address, &client_len);
-            std::string loginPrompt = "Matt_daemon Authentication Required\n";
-            loginPrompt += "Please login to continue.\n";
-            loginPrompt += "Usage: LOGIN <username> <password>\n";
-            loginPrompt += "Type HELP for more information\n\n";
-
-            if(send(new_client, loginPrompt.c_str(), loginPrompt.length(), 0) < 0) {
-                perror("send");
-            }
+            //send this only if user n
             global_logger->clientAuthStatus[new_client] = false;
             if (new_client < 0) {
                 global_logger->error("Matt_daemon: Accept failed");
@@ -237,24 +286,51 @@ int main() {
                     if (!message.empty() && message.back() == '\n') {
                         message.pop_back();
                     }
-                    auth.start(message, global_logger->clientAuthStatus, client_fds[i]);
-                    if (message == "quit") {
-                        global_logger->info("Matt_daemon: Request quit.");
-                        global_logger->info("Matt_daemon: Quitting.");
-                        
-                        // Notify all connected clients before shutting down
-                        for (int j = 0; j < MAX_CONNECTIONS; j++) {
-                            if (client_fds[j] != -1) {
-                                send(client_fds[j], "Daemon shutting down\n", 21, 0);
-                                close(client_fds[j]);
+
+                    // check if the client connected from browser and have GET method then extract the username and password he will joing like https://127.0.0.1:8080/login?username=user&password=pass
+                   if (message.find("HTTP/") != std::string::npos) {
+    // std::cout << "Matt_daemon: Browser login attempt from " + std::to_string(i) << std::endl;
+    std::string username, password;
+    
+    if (extract_credentials(message, username, password)) {
+        global_logger->info("Matt_daemon: Browser login attempt from " + std::to_string(i));
+        
+        // Enhanced successful login response
+        std::string response = render_success_page(username, i, get_last_n_lines(LOG_FILE, 20));;
+        
+        send(client_fds[i], response.c_str(), response.length(), 0);
+    }
+    else {
+        // Enhanced login failed response
+        std::string response = render_failure_page();
+
+        send(client_fds[i], response.c_str(), response.length(), 0);
+    }
+    
+    FD_CLR(client_fds[i], &master_fds);
+    close(client_fds[i]);
+    client_fds[i] = -1;
+} else {
+
+                        auth.start(message, global_logger->clientAuthStatus, client_fds[i]);
+                        if (message == "quit") {
+                            global_logger->info("Matt_daemon: Request quit.");
+                            global_logger->info("Matt_daemon: Quitting.");
+                            
+                            // Notify all connected clients before shutting down
+                            for (int j = 0; j < MAX_CONNECTIONS; j++) {
+                                if (client_fds[j] != -1) {
+                                    send(client_fds[j], "Daemon shutting down\n", 21, 0);
+                                    close(client_fds[j]);
+                                }
                             }
+                            
+                            daemon_running = false;
+                            break; // Exit the client loop
+                        } else {
+                            // Log user input using LOG level
+                            global_logger->log("Matt_daemon: User input: " + message);
                         }
-                        
-                        daemon_running = false;
-                        break; // Exit the client loop
-                    } else {
-                        // Log user input using LOG level
-                        global_logger->log("Matt_daemon: User input: " + message);
                     }
                 }
             }

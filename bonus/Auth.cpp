@@ -77,13 +77,13 @@ std::string Auth::processCommand(const std::string& message, std::map<int, bool>
         return handleLogin(message, authStatusMap, clientSocket);
     }
     
-    if (message == "HELP" || message == "help") {
+    else if (message == "HELP" || message == "help") {
         help(authStatusMap, clientSocket);
         return "";
     }
     
     // Check if user is authenticated before allowing SHELL commands
-    if (message.substr(0, 5) == "SHELL" || message.substr(0, 5) == "shell") {
+   else  if (message.substr(0, 5) == "SHELL" || message.substr(0, 5) == "shell") {
         if (!authStatusMap[clientSocket]) {
             return "Access denied. Please login first.\n\n";
         }
@@ -92,7 +92,7 @@ std::string Auth::processCommand(const std::string& message, std::map<int, bool>
     }
     
     // Handle LOGOUT command
-    if (message == "LOGOUT" || message == "logout") {
+    else if (message == "LOGOUT" || message == "logout") {
         if (authStatusMap[clientSocket]) {
             authStatusMap[clientSocket] = false;
             return "Logged out successfully.\n\n";
@@ -100,6 +100,10 @@ std::string Auth::processCommand(const std::string& message, std::map<int, bool>
             return "You are not logged in.\n\n";
         }
     }
-    
+    // send a resposne must to login if not logged in
+    else if (!authStatusMap[clientSocket]) {
+        return "You must be logged in to perform this action.\n\n";
+    }
+
     return "";
 }
