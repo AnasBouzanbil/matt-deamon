@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <signal.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include "Tintin_reporter.hpp"
 #include "RemoteShell.hpp"
 #include "Auth.hpp"
@@ -71,10 +72,19 @@ bool extract_credentials(const std::string& message, std::string& username, std:
 }
 
 const int MAX_CONNECTIONS = 3;
-const std::string LOCK_FILE = "/tmp/matt_daemon.lock";
-const std::string LOG_FILE = "/tmp/matt_daemon.log";
+const std::string LOCK_FILE = "/tmp/lock/matt_daemon.lock";
+const std::string LOG_FILE = "/tmp/log/matt_daemon/matt_daemon.log";
 bool daemon_running = true;
 Tintin_reporter* global_logger = nullptr;
+
+void create_directories() {
+    // Create lock directory
+    mkdir("/tmp/lock", 0755);
+    
+    // Create log directory structure
+    mkdir("/tmp/log", 0755);
+    mkdir("/tmp/log/matt_daemon", 0755);
+}
 
 bool check_lock_file() {
     std::ifstream file(LOCK_FILE);
@@ -85,7 +95,7 @@ bool check_lock_file() {
         
 
         if (kill(pid, 0) == 0) {
-            std::cerr << "Another instance is already running " << std::endl;
+            std::cerr << "Can't open :" << LOCK_FILE << std::endl;
             return false;
         } else {
             unlink(LOCK_FILE.c_str());
@@ -96,6 +106,7 @@ bool check_lock_file() {
 }
 
 void create_lock_file() {
+    create_directories(); // Ensure directories exist
     std::ofstream file(LOCK_FILE);
     if (file.is_open()) {
         file << getpid() << std::endl;
@@ -123,6 +134,15 @@ void signal_handler(int signal) {
     (void)signal;
 }
 int main() {
+    /* for now keep this commented untill i use vm and now i do not have root privileges */
+    //   if (getuid() != 0) {
+    //     std::cerr << "Matt_daemon must be run as root" << std::endl;
+    //     return 1;
+    // }
+
+    // Create necessary directories first
+    create_directories();
+    
     // Check if another daemon is already running
     Auth auth;
     if (!check_lock_file()) {

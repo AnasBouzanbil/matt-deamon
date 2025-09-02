@@ -1,6 +1,6 @@
 CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++11
-TARGET = Matt_daemon
+CXXFLAGS = -Wall -Wextra -Werror
+TARGET = MattDaemon
 SOURCES = main.cpp Tintin_reporter.cpp RemoteShell.cpp Auth.cpp Pages.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 

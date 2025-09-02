@@ -12,8 +12,17 @@ private:
     bool log_to_console;
 
 public:
-    // Constructor
-    Tintin_reporter(const std::string& file_path = "/tmp/matt_daemon.log", bool console = false);
+    // Default Constructor
+    Tintin_reporter();
+    
+    // Parameterized Constructor
+    Tintin_reporter(const std::string& file_path, bool console = false);
+    
+    // Copy Constructor (Coplien Form)
+    Tintin_reporter(const Tintin_reporter& other);
+    
+    // Assignment Operator (Coplien Form)
+    Tintin_reporter& operator=(const Tintin_reporter& other);
     
     // Destructor
     ~Tintin_reporter();
@@ -37,6 +46,7 @@ private:
     // Helper methods
     void write_log(const std::string& level, const std::string& message);
     std::string get_timestamp() const;
+    void test_log_file_access();
 };
 
 #endif // TINTIN_REPORTER_HPP

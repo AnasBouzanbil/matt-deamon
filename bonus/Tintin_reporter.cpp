@@ -1,12 +1,31 @@
 #include "Tintin_reporter.hpp"
 
+// Default Constructor
+Tintin_reporter::Tintin_reporter() 
+    : log_file_path("/tmp/log/matt_daemon/matt_daemon.log"), log_to_console(false) {
+    test_log_file_access();
+}
+
+// Parameterized Constructor
 Tintin_reporter::Tintin_reporter(const std::string& file_path, bool console)
     : log_file_path(file_path), log_to_console(console) {
-    // Test if we can write to the log file
-    std::ofstream test_file(log_file_path, std::ios::app);
-    if (!test_file.is_open() && log_to_console) {
-        std::cerr << "[Tintin_reporter] Warning: Cannot open log file: " << log_file_path << std::endl;
+    test_log_file_access();
+}
+
+// Copy Constructor (Coplien Form)
+Tintin_reporter::Tintin_reporter(const Tintin_reporter& other)
+    : log_file_path(other.log_file_path), log_to_console(other.log_to_console), clientAuthStatus(other.clientAuthStatus) {
+    // No dynamic allocation, so simple member copy is sufficient
+}
+
+// Assignment Operator (Coplien Form)
+Tintin_reporter& Tintin_reporter::operator=(const Tintin_reporter& other) {
+    if (this != &other) {
+        log_file_path = other.log_file_path;
+        log_to_console = other.log_to_console;
+        clientAuthStatus = other.clientAuthStatus;
     }
+    return *this;
 }
 
 Tintin_reporter::~Tintin_reporter() {
@@ -75,4 +94,12 @@ std::string Tintin_reporter::get_timestamp() const {
     // Format: [DD/MM/YYYY-HH:MM:SS] as required by subject
     std::strftime(timestamp, sizeof(timestamp), "%d/%m/%Y-%H:%M:%S", std::localtime(&now));
     return std::string(timestamp);
+}
+
+void Tintin_reporter::test_log_file_access() {
+    // Test if we can write to the log file
+    std::ofstream test_file(log_file_path, std::ios::app);
+    if (!test_file.is_open() && log_to_console) {
+        std::cerr << "[Tintin_reporter] Warning: Cannot open log file: " << log_file_path << std::endl;
+    }
 }
