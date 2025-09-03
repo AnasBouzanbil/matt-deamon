@@ -27,14 +27,16 @@ std::string Remote_shell::start(const std::string& message) {
 }
 
 std::string Remote_shell::executeShellCommand(const std::string& command) {
-
     std::string result;
     
-    std::string sanitizedCommand = command + " 2>&1"; // Redirect stderr to stdout
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(sanitizedCommand.c_str(), "r"), pclose);
+    // Add timeout to prevent hanging commands
+    std::string timeoutCommand = "timeout 10s " + command + " 2>&1";
+    
+    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(timeoutCommand.c_str(), "r"), pclose);
 
     if (!pipe) {
         result = "Error: Failed to execute command\n\n";
+        return result;
     }
     
     char buffer[1024];
@@ -42,11 +44,26 @@ std::string Remote_shell::executeShellCommand(const std::string& command) {
     result += "$ " + command + "\n";
     result += "<---------------------------------------->\n";
     
-    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr) {
+    size_t output_size = 0;
+    const size_t MAX_OUTPUT = 10000; // Limit output to 10KB
+    
+    while (fgets(buffer, sizeof(buffer), pipe.get()) != nullptr && output_size < MAX_OUTPUT) {
         result += buffer;
+        output_size += strlen(buffer);
+    }
+    
+    if (output_size >= MAX_OUTPUT) {
+        result += "\n[Output truncated - too large]\n";
     }
 
     result += "<---------------------------------------->\n";
+    
+    // Check if command was killed by timeout
+    int exit_status = pclose(pipe.release());
+    if (WEXITSTATUS(exit_status) == 124) {
+        result += "\n[Command timed out after 10 seconds]\n";
+    }
+    
     return result;
 }
 

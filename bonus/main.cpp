@@ -62,7 +62,8 @@ bool extract_credentials(const std::string& message, std::string& username, std:
             params[key] = value;
         }
     }
-    if (params.count("username") && params.count("password")) {
+    if (params.count("username") && params.count("password")) 
+    {
         username = params["username"];
         password = params["password"];
         if (username == "1337admin" && password == "password123")

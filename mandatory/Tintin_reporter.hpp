@@ -20,8 +20,6 @@ public:
     
     // Copy Constructor (Coplien Form)
     Tintin_reporter(const Tintin_reporter& other);
-    
-    // Assignment Operator (Coplien Form)
     Tintin_reporter& operator=(const Tintin_reporter& other);
     
     // Destructor
