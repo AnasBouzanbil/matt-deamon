@@ -335,19 +335,11 @@ int main() {
 
                         auth.start(message, global_logger->clientAuthStatus, client_fds[i]);
                         if (message == "quit") {
-                            global_logger->info("Matt_daemon: Request quit.");
-                            global_logger->info("Matt_daemon: Quitting.");
-                            
-                            // Notify all connected clients before shutting down
-                            for (int j = 0; j < MAX_CONNECTIONS; j++) {
-                                if (client_fds[j] != -1) {
-                                    send(client_fds[j], "Daemon shutting down\n", 21, 0);
-                                    close(client_fds[j]);
-                                }
-                            }
-                            
-                            daemon_running = false;
-                            break; // Exit the client loop
+                            // here will diconnect the client
+                            global_logger->info("Matt_daemon: Client requested quit from slot " + std::to_string(i));
+                            FD_CLR(client_fds[i], &master_fds);
+                            close(client_fds[i]);
+                            client_fds[i] = -1;
                         } else {
                             // Log user input using LOG level
                             global_logger->log("Matt_daemon: User input: " + message);
