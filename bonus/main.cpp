@@ -19,8 +19,6 @@
 #include <map>
 #include "Pages.hpp"
 
-// Extracts username and password from HTTP GET request string
-// Reads the last n lines from a file and returns them as a string
 std::string get_last_n_lines(const std::string& filename, int n) {
     std::ifstream file(filename);
     if (!file.is_open()) return "Could not open log file.";
@@ -37,38 +35,36 @@ std::string get_last_n_lines(const std::string& filename, int n) {
     return result;
 }
 bool extract_credentials(const std::string& message, std::string& username, std::string& password) {
-    // Look for /login?username=...&password=...
-    std::size_t login_pos = message.find("/login?");
-    if (login_pos == std::string::npos)
+    // Look for /(username)&(password) for example localhost:8080/anas&1234 or localhost:8080/ahmed&ahmed1234
+    
+    // Find the start of the path after GET 
+    std::size_t get_pos = message.find("GET /");
+    if (get_pos == std::string::npos)
         return false;
-    std::size_t start = login_pos + 7; // after '/login'
-    std::size_t end = message.find(" ", start);
-    if (end == std::string::npos)
-        end = message.length();
-    std::string query = message.substr(start, end - start);
-    if (query.empty())
+    
+    std::size_t path_start = get_pos + 5; // after 'GET /'
+    std::size_t path_end = message.find(" ", path_start);
+    if (path_end == std::string::npos)
         return false;
-    // Remove leading '?'
-    if (query[0] == '?')
-        query = query.substr(1);
-    std::map<std::string, std::string> params;
-    std::istringstream iss(query);
-    std::string token;
-    while (std::getline(iss, token, '&')) {
-        std::size_t eq = token.find('=');
-        if (eq != std::string::npos) {
-            std::string key = token.substr(0, eq);
-            std::string value = token.substr(eq + 1);
-            params[key] = value;
-        }
-    }
-    if (params.count("username") && params.count("password")) 
-    {
-        username = params["username"];
-        password = params["password"];
-        if (username == "1337admin" && password == "password123")
-            return true;
-    }
+    
+    std::string path = message.substr(path_start, path_end - path_start);
+    
+    // Look for the pattern username&password
+    std::size_t amp_pos = path.find('&');
+    if (amp_pos == std::string::npos || amp_pos == 0 || amp_pos == path.length() - 1)
+        return false;
+    
+    username = path.substr(0, amp_pos);
+    password = path.substr(amp_pos + 1);
+    
+    // Check if both username and password are not empty
+    if (username.empty() || password.empty())
+        return false;
+    
+    // Validate credentials
+    if (username == "1337" && password == "ad123")
+        return true;
+    
     return false;
 }
 
@@ -335,11 +331,11 @@ int main() {
 
                         auth.start(message, global_logger->clientAuthStatus, client_fds[i]);
                         if (message == "quit") {
-                            // here will diconnect the client
                             global_logger->info("Matt_daemon: Client requested quit from slot " + std::to_string(i));
                             FD_CLR(client_fds[i], &master_fds);
                             close(client_fds[i]);
                             client_fds[i] = -1;
+                            //send goodbye message to client before closing and close the connection
                         } else {
                             // Log user input using LOG level
                             global_logger->log("Matt_daemon: User input: " + message);
