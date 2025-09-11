@@ -9,6 +9,9 @@
 
 
 class Auth {
+private:
+    std::map<std::string, std::string> users; // username -> password mapping
+
 public:
     Auth();
     ~Auth();
@@ -16,6 +19,8 @@ public:
     void help(std::map<int, bool>& authStatusMap, int clientSocket) const;
     std::string processCommand(const std::string& message, std::map<int, bool>& authStatusMap, int clientSocket);
     void start(std::string& message, std::map<int, bool>& authStatusMap , int clientSocket);
+    std::string handleCreateUser(const std::string& message);
+    bool authenticateUser(const std::string& username, const std::string& password);
 
 };
 
