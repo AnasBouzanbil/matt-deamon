@@ -78,10 +78,10 @@ void signal_handler(int signal) {
 int main() {
 
     /* for now keep this commented untill i use vm and now i do not have root privileges */
-    //   if (getuid() != 0) {
-    //     std::cerr << "Matt_daemon must be run as root" << std::endl;
-    //     return 1;
-    // }
+      if (getuid() != 0) {
+        std::cerr << "Matt_daemon must be run as root" << std::endl;
+        return 1;
+    }
 
 
     // Create necessary directories first
@@ -148,7 +148,7 @@ int main() {
     struct sockaddr_in address;
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(8080); 
+    address.sin_port = htons(4242); 
     
     // Bind socket
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {

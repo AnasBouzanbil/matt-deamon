@@ -98,7 +98,7 @@ void Tintin_reporter::write_log(const std::string& level, const std::string& mes
 std::string Tintin_reporter::get_timestamp() const {
     std::time_t now = std::time(nullptr);
     char timestamp[100];
-    // Format: [DD/MM/YYYY-HH:MM:SS] as required by subject
-    std::strftime(timestamp, sizeof(timestamp), "%d/%m/%Y-%H:%M:%S", std::localtime(&now));
+    // Format: [ DD / MM / YYYY - HH : MM : SS ] as required by subject
+    std::strftime(timestamp, sizeof(timestamp), "%d / %m / %Y - %H : %M : %S", std::localtime(&now));
     return std::string(timestamp);
 }
