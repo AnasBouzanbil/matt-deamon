@@ -14,18 +14,18 @@
 #include "Tintin_reporter.hpp"
 
 const int MAX_CONNECTIONS = 3;
-const std::string LOCK_FILE = "/tmp/lock/matt_daemon.lock";
-const std::string LOG_FILE = "/tmp/log/matt_daemon/matt_daemon.log";
+const std::string LOCK_FILE = "/var/lock/matt_daemon.lock";
+const std::string LOG_FILE = "/var/log/matt_daemon/matt_daemon.log";
 bool daemon_running = true;
 Tintin_reporter* global_logger = nullptr;
 
 void create_directories() {
     // Create lock directory
-    mkdir("/tmp/lock", 0755);
+    mkdir("/var/lock", 0755);
     
     // Create log directory structure
-    mkdir("/tmp/log", 0755);
-    mkdir("/tmp/log/matt_daemon", 0755);
+    mkdir("/var/log", 0755);
+    mkdir("/var/log/matt_daemon", 0755);
 }
 
 bool check_lock_file() {

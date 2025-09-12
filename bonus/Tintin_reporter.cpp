@@ -2,7 +2,7 @@
 
 // Default Constructor
 Tintin_reporter::Tintin_reporter() 
-    : log_file_path("/tmp/log/matt_daemon/matt_daemon.log"), log_to_console(false) {
+    : log_file_path("/var/log/matt_daemon/matt_daemon.log"), log_to_console(false) {
     test_log_file_access();
 }
 

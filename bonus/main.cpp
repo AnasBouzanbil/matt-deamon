@@ -69,18 +69,18 @@ bool extract_credentials(const std::string& message, std::string& username, std:
 }
 
 const int MAX_CONNECTIONS = 3;
-const std::string LOCK_FILE = "/tmp/lock/matt_daemon.lock";
-const std::string LOG_FILE = "/tmp/log/matt_daemon/matt_daemon.log";
+const std::string LOCK_FILE = "/var/lock/matt_daemon.lock";
+const std::string LOG_FILE = "/var/log/matt_daemon/matt_daemon.log";
 bool daemon_running = true;
 Tintin_reporter* global_logger = nullptr;
 
 void create_directories() {
     // Create lock directory
-    mkdir("/tmp/lock", 0755);
+    mkdir("/var/lock/matt_daemon", 0755);
     
     // Create log directory structure
-    mkdir("/tmp/log", 0755);
-    mkdir("/tmp/log/matt_daemon", 0755);
+    mkdir("/var/log", 0755);
+    mkdir("/var/log/matt_daemon", 0755);
 }
 
 bool check_lock_file() {
@@ -131,16 +131,13 @@ void signal_handler(int signal) {
     (void)signal;
 }
 int main() {
-    /* for now keep this commented untill i use vm and now i do not have root privileges */
-    //   if (getuid() != 0) {
-    //     std::cerr << "Matt_daemon must be run as root" << std::endl;
-    //     return 1;
-    // }
+    if (getuid() != 0) {
+        std::cerr << "Matt_daemon must be run as root" << std::endl;
+        return 1;
+    }
 
-    // Create necessary directories first
     create_directories();
     
-    // Check if another daemon is already running
     Auth auth;
     if (!check_lock_file()) {
         return 1;
@@ -158,36 +155,28 @@ int main() {
     }
     
     if (pid > 0) {
-        // Parent process - just exit without removing lock file
         std::cout << "Socket daemon started with PID: " << pid << std::endl;
         delete global_logger;
         exit(0);
     }
     
-    // Child process becomes daemon - now create lock file with daemon PID
-    
-    // Setup exit handler for daemon process only
     atexit(remove_lock_file);
     create_lock_file();
     
-    // Child process becomes daemon
     setsid();
     close(0); 
     close(1);
     close(2); 
     
-    // Recreate logger for daemon process
     delete global_logger;
     global_logger = new Tintin_reporter(LOG_FILE);
     global_logger->info("Matt_daemon: Creating server.");
     
-    // Setup signal handlers
     signal(SIGTERM, signal_handler);
     signal(SIGINT, signal_handler);  
     signal(SIGQUIT, signal_handler);
     signal(SIGHUP, signal_handler);
     
-    // Create socket
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) {
         global_logger->error("Matt_daemon: Socket creation failed");
@@ -204,7 +193,7 @@ int main() {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(8080); 
     
-    // Bind socket
+
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         global_logger->error("Matt_daemon: Bind failed");
         close(server_fd);
@@ -227,7 +216,7 @@ int main() {
     
     int client_fds[MAX_CONNECTIONS];
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
-        client_fds[i] = -1; // -1 means empty slot
+        client_fds[i] = -1;
     }
         
     fd_set read_fds, master_fds;
@@ -235,13 +224,11 @@ int main() {
     FD_SET(server_fd, &master_fds);
     int max_fd = server_fd;
     
-    // Main daemon loop
     while (daemon_running) {
         read_fds = master_fds;
         
         if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) < 0) {
             if (errno == EINTR) {
-                // Interrupted by signal, continue
                 continue;
             }
             if (daemon_running) {
@@ -250,12 +237,12 @@ int main() {
             continue;
         }
         
-        // Check for new connections
+        
         if (FD_ISSET(server_fd, &read_fds)) {
             struct sockaddr_in client_address;
             socklen_t client_len = sizeof(client_address);
             int new_client = accept(server_fd, (struct sockaddr *)&client_address, &client_len);
-            //send this only if user n
+           
             global_logger->clientAuthStatus[new_client] = false;
             if (new_client < 0) {
                 global_logger->error("Matt_daemon: Accept failed");
@@ -269,20 +256,20 @@ int main() {
                 }
                 
                 if (slot != -1) {
-                    // Accept the connection
+                    
                     client_fds[slot] = new_client;
                     FD_SET(new_client, &master_fds);
                     max_fd = std::max(max_fd, new_client);
                     global_logger->info("Matt_daemon: Client connected, slot " + std::to_string(slot));
                 } else {
-                    // No available slots, reject connection
+                    
                     global_logger->warning("Matt_daemon: Maximum connections reached, rejecting client");
                     close(new_client);
                 }
             }
         }
         
-        // Check existing client connections for data
+        
         for (int i = 0; i < MAX_CONNECTIONS; i++) {
             if (client_fds[i] != -1 && FD_ISSET(client_fds[i], &read_fds)) {
                 char buffer[1024];
@@ -290,35 +277,33 @@ int main() {
                 int bytes_read = recv(client_fds[i], buffer, sizeof(buffer) - 1, 0);
                 
                 if (bytes_read <= 0) {
-                    // Client disconnected
+                   
                     global_logger->info("Matt_daemon: Client disconnected from slot " + std::to_string(i));
                     FD_CLR(client_fds[i], &master_fds);
                     close(client_fds[i]);
                     client_fds[i] = -1;
                 } else {
-                    // Process received data
+                    
                     std::string message(buffer, bytes_read);
                     
-                    // Remove trailing newline if present
+                    
                     if (!message.empty() && message.back() == '\n') {
                         message.pop_back();
                     }
 
-                    // check if the client connected from browser and have GET method then extract the username and password he will joing like https://127.0.0.1:8080/login?username=user&password=pass
-                   if (message.find("HTTP/") != std::string::npos) {
-    // std::cout << "Matt_daemon: Browser login attempt from " + std::to_string(i) << std::endl;
+         
+                    if (message.find("HTTP/") != std::string::npos) {
     std::string username, password;
     
     if (extract_credentials(message, username, password)) {
         global_logger->info("Matt_daemon: Browser login attempt from " + std::to_string(i));
         
-        // Enhanced successful login response
         std::string response = render_success_page(username, i, get_last_n_lines(LOG_FILE, 20));;
         
         send(client_fds[i], response.c_str(), response.length(), 0);
     }
     else {
-        // Enhanced login failed response
+        global_logger->info("Matt_daemon: Browser failed login attempt from " + std::to_string(i));
         std::string response = render_failure_page();
 
         send(client_fds[i], response.c_str(), response.length(), 0);
@@ -335,9 +320,8 @@ int main() {
                             FD_CLR(client_fds[i], &master_fds);
                             close(client_fds[i]);
                             client_fds[i] = -1;
-                            //send goodbye message to client before closing and close the connection
+
                         } else {
-                            // Log user input using LOG level
                             global_logger->log("Matt_daemon: User input: " + message);
                         }
                     }
@@ -346,10 +330,8 @@ int main() {
         }
     }
     
-    // Cleanup when shutting down
     global_logger->info("Matt_daemon: Quitting.");
     
-    // Close all client connections
     for (int i = 0; i < MAX_CONNECTIONS; i++) {
         if (client_fds[i] != -1) {
             close(client_fds[i]);
@@ -358,10 +340,8 @@ int main() {
     
     close(server_fd);
     
-    // Remove lock file
     remove_lock_file();
     
-    // Cleanup logger
     delete global_logger;
     return 0;
 }
