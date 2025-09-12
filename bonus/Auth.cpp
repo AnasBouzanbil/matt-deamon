@@ -16,7 +16,6 @@ std::string handleLogin(const std::string& message, std::map<int, bool>& authSta
 
 
 Auth::Auth() {
-    // Initialize with default admin user
     users["admin"] = "1234";
 }
 Auth::~Auth() {}
@@ -41,7 +40,7 @@ void Auth::help(std::map<int, bool>& authStatusMap, int clientSocket) const {
         helpMessage = "Available commands:\n";
         helpMessage += "LOGOUT - Log out of the session\n";
         helpMessage += "SHELL <command> - Execute a shell command\n";
-        helpMessage += "CREATEUSER <username> <password> - Create a new user\n";
+        helpMessage += "CREATEUSER <username> <password> <root password> - Create a new user\n";
         helpMessage += "QUIT - Shut down Matt_daemon\n";
         helpMessage += "HELP - Show this help message\n\n";
     }
@@ -52,11 +51,16 @@ void Auth::help(std::map<int, bool>& authStatusMap, int clientSocket) const {
 
 std::string Auth::handleCreateUser(const std::string& message) {
     std::istringstream iss(message);
-    std::string command, username, password;
-    iss >> command >> username >> password;
+    std::string command, username, password, rootPassword;
+    iss >> command >> username >> password >> rootPassword;
     
-    if (username.empty() || password.empty()) {
-        return "Usage: CREATEUSER <username> <password>\n\n";
+    if (username.empty() || password.empty() || rootPassword.empty()) {
+        return "Usage: CREATEUSER <username> <password> <root password>\n\n";
+    }
+    
+    // Check if the root password is correct
+    if (rootPassword != "admin123") {
+        return "Access denied. Invalid root password.\n\n";
     }
     
     if (users.find(username) != users.end()) {
@@ -91,7 +95,7 @@ std::string handleLogin(const std::string& message, std::map<int, bool>& authSta
         response += "Available commands:\n";
         response += "LOGOUT - Log out of the session\n";
         response += "SHELL <command> - Execute a shell command\n";
-        response += "CREATEUSER <username> <password> - Create a new user\n";
+        response += "CREATEUSER <username> <password> <root password> - Create a new user\n";
         response += "QUIT - Shut down Matt_daemon\n";
         response += "HELP - Show this help message\n\n";
     } else {
